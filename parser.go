@@ -7,6 +7,10 @@ import (
 	"webreader"
 )
 
+const (
+	ENDMESSAGE string = "LOAD_DONE"
+)
+
 type Parser struct {
 	Options *webreader.RequestOptions
 }
