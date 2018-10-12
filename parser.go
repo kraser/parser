@@ -2,12 +2,15 @@
 package parser
 
 import (
+	errs "errorshandler"
 	"webreader"
+
 	//"fmt"
 	log "logger"
 	"math/rand"
-	"os"
-	"os/signal"
+
+	//"os"
+	//"os/signal"
 	"priceloader"
 	"time"
 )
@@ -83,9 +86,13 @@ func (pParser *ParserObject) Run() {
 			}
 		}
 	*/
-	//	result := webreader.DoRequest(pParser.CustomParserOptions.URL, pParser.Options)
-	//	pParser.CustomParserActions.ParseCategories(result)
-	//	pParser.CustomParserActions.ParseItems()
+
+	result, err := webreader.DoRequest(pParser.CustomParserOptions.URL, pParser.Options)
+	errs.ErrorHandle(err)
+	log.CheckHtml(pParser.CustomParserOptions.URL, result, "debug")
+	pParser.CustomParserActions.ParseCategories(result)
+
+	pParser.CustomParserActions.ParseItems()
 }
 
 /*
