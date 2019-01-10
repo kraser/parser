@@ -64,12 +64,12 @@ func (p *Pool) Pop() interface{} {
 type LoadController struct {
 	Loaders        int
 	LoaderCapacity int
-	pool           Pool                      //Наша "куча" рабочих
-	done           chan *Loader              //Канал уведомления о завершении для рабочих
+	pool           Pool                      //"Куча" загрузчиков
+	done           chan *Loader              //Канал уведомления о завершении для загрузчиков
 	requests       chan priceloader.LoadTask //Канал для получения новых заданий
 	flowctrl       chan bool                 //Канал для PMFC
-	queue          int                       //Количество незавершенных заданий переданных рабочим
-	wg             *sync.WaitGroup           //Группа ожидания для рабочих
+	queue          int                       //Количество незавершенных заданий переданных загрузчикам
+	wg             *sync.WaitGroup           //Группа ожидания для загрузчиков
 }
 
 //Инициализируем регулятор. Аргументом получаем канал по которому приходят задания
@@ -87,7 +87,7 @@ func (controller *LoadController) init(task chan priceloader.LoadTask) {
 		}
 	}()
 
-	//Инициализируем кучу и создаем рабочих:
+	//Инициализируем кучу и создаем загрузчики:
 	heap.Init(&controller.pool)
 	for i := 0; i < controller.Loaders; i++ {
 		load := &Loader{
@@ -101,31 +101,31 @@ func (controller *LoadController) init(task chan priceloader.LoadTask) {
 	}
 }
 
-//Рабочая функция балансировщика получает аргументом канал уведомлений от главного цикла
+//Рабочая функция регулятора получает аргументом канал уведомлений от главного цикла
 func (controller *LoadController) balance(quit chan bool) {
 	lastjobs := false //Флаг завершения, поднимаем когда кончились задания
 	for {
 		select { //В цикле ожидаем коммуникации по каналам:
 
 		case <-quit: //пришло указание на остановку работы
-			controller.wg.Wait() //ждем завершения текущих загрузок рабочими..
+			controller.wg.Wait() //ждем завершения текущих загрузок...
 			quit <- true         //..и отправляем сигнал что закончили
 
 		case task := <-controller.requests: //Получено новое задание (от flow controller)
 			if task.Message != ENDMESSAGE { //Проверяем - а не кодовая ли это фраза?
-				controller.dispatch(task) // если нет, то отправляем рабочим
+				controller.dispatch(task) // если нет, то отправляем загрузчикам
 			} else {
 				lastjobs = true //иначе поднимаем флаг завершения
 			}
 
-		case load := <-controller.done: //пришло уведомление, что рабочий закончил загрузку
+		case load := <-controller.done: //пришло уведомление, что загрузчик закончил загрузку
 			controller.completed(load) //обновляем его данные
 			if lastjobs {
-				if load.pending == 0 { //если у рабочего кончились задания..
+				if load.pending == 0 { //если у загрузчика кончились задания..
 					heap.Remove(&controller.pool, load.index) //то удаляем его из кучи
 				}
 				if len(controller.pool) == 0 { //а если куча стала пуста
-					//значит все рабочие закончили свои очереди
+					//значит все загрузчики закончили свои очереди
 					quit <- true //и можно отправлять сигнал подтверждения готовности к останову
 				}
 			}
@@ -135,7 +135,7 @@ func (controller *LoadController) balance(quit chan bool) {
 
 // Функция отправки задания
 func (controller *LoadController) dispatch(task priceloader.LoadTask) {
-	load := heap.Pop(&controller.pool).(*Loader) //Берем из кучи самого незагруженного рабочего..
+	load := heap.Pop(&controller.pool).(*Loader) //Берем из кучи самого незагруженный загрузчик..
 	load.task <- task                            //..и отправляем ему задание.
 	load.pending++                               //Добавляем ему "весу"..
 	heap.Push(&controller.pool, load)            //..и отправляем назад в кучу
